@@ -39,7 +39,9 @@ Install the requirements using ``pip install -r requirements.txt``.
 
 ### Configuration
 
-Update the ``config.py`` file according to your needs. The following settings exist:
+Create a new ``config.py`` file using the ``config.py.template`` and update it
+according to your needs. For your convenience, all available settings are also
+listed below:
 
 | Field                     | Type      | Description                                                               |
 | :-                        | :-        | :-                                                                        |
@@ -54,8 +56,9 @@ Update the ``config.py`` file according to your needs. The following settings ex
 ### Setting up a Service
 
 If you want to set up the script to run as a service on Linux, you can use the
-``discord-reddit-feed.service`` file to create a new systemd service. Modify it
-according to your needs and copy it to ``/etc/systemd/system``.
+``discord-reddit-feed.service.template`` file to create a new systemd service.
+Remove the ``.template`` extension and modify it according to your needs, then
+copy it to ``/etc/systemd/system``.
 
 | Field                 | Description                                         |
 | :-                    | :-                                                  |

@@ -1,3 +1,7 @@
 # Directories
 __pycache__/
 logs/
+
+# Files
+config.py
+discord-reddit-feed.service
