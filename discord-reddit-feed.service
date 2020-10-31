@@ -1,0 +1,16 @@
+[Unit]
+Description=Discord-Reddit-Feed
+After=multi-user.target
+
+[Service]
+User=USERNAME
+Group=GROUPNAME
+WorkingDirectory=/home/discord-reddit-poster
+ExecStart=/usr/bin/python3 /home/discord-reddit-poster/poster.py
+Type=idle
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=15
+
+[Install]
+WantedBy=multi-user.target
