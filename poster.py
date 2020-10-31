@@ -94,7 +94,7 @@ class DiscordRedditFeed:
         self.logger = logging.getLogger("poster")
         self.logger.info("Setting up poster.")
 
-        self._headers = {"User-Agent": "RedditPoster/1.0"}
+        self._headers = {"User-Agent": "DiscordRedditFeed/1.0"}
         self._embed_colour = 0xFF4500  # Reddit brand colour.
         self._webhook_args = dict()
         self._post_webhook = None
