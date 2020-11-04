@@ -21,7 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
-import datetime
+from datetime import datetime, timezone
 import io
 import json
 import logging
@@ -44,7 +44,7 @@ def setup_logging():
         os.mkdir(path)
 
     logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
 
     streamHandler = logging.StreamHandler(stream=sys.stdout)
 
@@ -165,7 +165,7 @@ class DiscordRedditFeed:
             When this is not specified, posts are fetched by their
             age instead.
         limit: Optional[int]
-            The maximum amount of posts to fetch.
+            The maximum amount of posts to fetch. Defaults to 10.
 
         Returns
         -------
@@ -178,7 +178,7 @@ class DiscordRedditFeed:
         params = {"limit": limit}
         if before:
             params["before"] = before
-
+        
         resp = requests.get(url, headers=self._headers, params=params)
 
         try:
@@ -205,8 +205,8 @@ class DiscordRedditFeed:
         author = data["author"]
         author_url = f"https://www.reddit.com/user/{author}"
         permalink = "https://www.reddit.com" + data["permalink"]
-        created_at = datetime.datetime.fromtimestamp(data["created_utc"])
-        created_at = created_at.replace(tzinfo=datetime.timezone.utc)
+        created_utc = datetime.fromtimestamp(data["created_utc"])
+        created_utc = created_utc.replace(tzinfo=timezone.utc)
         post_hint = data.get("post_hint", None)
 
         is_spoiler = data["spoiler"]
@@ -216,7 +216,7 @@ class DiscordRedditFeed:
         embed = discord.Embed()
         embed.url = permalink
         embed.title = truncate(title, 256)
-        embed.timestamp = created_at
+        embed.timestamp = created_utc
         embed.colour = self._embed_colour
 
         embed_author = f"New post on /r/{self.config.subreddit}"
@@ -320,52 +320,73 @@ class DiscordRedditFeed:
                     self._embed_colour = int(colour[1:], 16)
 
         # Prepare fetch loop.
-        before = None  # Full name of a post to use as an anchor.
-        limit = 100  # The maximum is 100.
 
-        # As we do not want to retroactively post things from the subreddit,
-        # we fetch the newest post and use it as the anchor point.
-        posts = self.fetch_posts(limit=1)
-        if len(posts) == 1:
-            before = posts[0]["data"]["name"]
+        # Timestamp of latest post. On Windows and Unix, this is UTC.
+        # See https://docs.python.org/3/library/time.html#time.time
+        created_utc = time.time()
+
+        # Maximum amount of posts to fetch. 100 is the maximum.
+        limit = 100
 
         # Start fetch loop.
         self.logger.info("Starting fetch loop.")
         while True:
             fetch = True
+
+            # Reset post cache and before.
+            posts = list()
+            before = None
+
+            self.logger.debug(f"Fetching posts (created_utc={created_utc}, limit={limit})")
             while fetch:
-                self.logger.debug(f"Fetching posts (before={before}, limit={limit})")
-                posts = self.fetch_posts(before=before, limit=limit)
-                self.logger.debug(f"Fetched {len(posts)} post(s).")
-                if len(posts) == 0:
+                fetched = self.fetch_posts(before=before, limit=limit)
+                if fetched is None:
                     break
 
-                # Sort posts by date so that newest appear last.
-                posts = sorted(posts, key=lambda d: d["data"]["created_utc"])
+                self.logger.debug(f"Fetched {len(fetched)} post(s).")
+                if len(fetched) == 0:
+                    break
 
-                for post in posts:
-                    try:
-                        self.send_post(post["data"])
-                    except Exception as e:
-                        url = "https://www.reddit.com" + post["data"]["permalink"]
-                        name = post["data"]["name"]
-                        self.send_error(f"Could not send post [{name}]({url})!", e)
-                        return
+                # Filter posts by their date, then sort oldest to newest.
+                valid = [post for post in fetched if post["data"]["created_utc"] > created_utc]
+                self.logger.debug(f"Found {len(valid)} new post(s).")
 
-                    before = post["data"]["name"]
+                posts += valid
+                posts = sorted(posts, key=lambda post: post["data"]["created_utc"])
 
-                    # Slow down if we are sending a lot of posts. This is not
-                    # going to prevent an eventual 429 if you are spamming the
-                    # webhook with up to 100 posts. Thankfully, discord.py
-                    # handles the ratelimit for us.
-                    if len(posts) > 30:
-                        time.sleep(1)
+                # Fetch more relative to the oldest post if every post we
+                # got was newer than our cached created_utc.
+                fetch = len(valid) == len(fetched)
 
-                # If we reached the post limit, we may be further behind.
-                # No subreddit should be this busy, but hey. Edge cases!
-                fetch = len(posts) == limit
+                # If we are doing another fetch, set before to the full name
+                # of the oldest post we received in this fetch.
+                if fetch:
+                    oldest = posts[0]
+                    before = oldest["data"]["name"]
 
-            # Wait a bit between fetches.
+            # Send the collected posts until we are up-to-date.
+            if len(posts) > 0:
+                self.logger.debug(f"Posting {len(posts)} post(s).")
+            
+            for post in posts:
+                try:
+                    self.send_post(post["data"])
+                except Exception as e:
+                    url = "https://www.reddit.com" + post["data"]["permalink"]
+                    name = post["data"]["name"]
+                    self.send_error(f"Could not send post [{name}]({url})!", e)
+                    return
+
+                created_utc = max(created_utc, post["data"]["created_utc"])
+
+                # Slow down if we are sending a lot of posts. This is not
+                # going to prevent an eventual 429 if you are spamming the
+                # webhook with up to 100 posts. Thankfully, discord.py
+                # handles the ratelimit for us.
+                if len(posts) > 30:
+                    time.sleep(1)
+
+            # Wait between fetch cycles.
             time.sleep(self.config.fetch_interval)
 
 
