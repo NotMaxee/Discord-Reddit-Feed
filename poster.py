@@ -44,7 +44,7 @@ def setup_logging():
         os.mkdir(path)
 
     logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
 
     streamHandler = logging.StreamHandler(stream=sys.stdout)
 
