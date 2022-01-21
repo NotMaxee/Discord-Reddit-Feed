@@ -11,6 +11,8 @@
 
 <!-- Content -->
 
+**ATTENTION:** Since the release of this software discord.py has been discontinued. The code in this repository may not work anymore.
+
 ## Overview
 
 This is a simple script that allows you to track new posts for one subreddit
